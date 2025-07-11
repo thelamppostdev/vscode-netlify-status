@@ -77,6 +77,35 @@ npm run compile
 
 Then press `F5` to open a new VS Code window with the extension loaded.
 
+### Version Management
+
+Use the built-in version bump tool to keep package.json and git tags in sync:
+
+```bash
+# Increment patch version (1.0.0 → 1.0.1)
+npm run bump:patch
+
+# Increment minor version (1.0.0 → 1.1.0)
+npm run bump:minor
+
+# Increment major version (1.0.0 → 2.0.0)
+npm run bump:major
+
+# Set specific version
+npm run bump 2.5.0
+
+# Automatically push changes and tag to remote
+npm run bump:patch -- --push
+```
+
+The version bump tool will:
+1. Update the version in `package.json`
+2. Commit the change with a descriptive message
+3. Create a matching git tag (e.g., `v1.0.1`)
+4. Optionally push to remote (with `--push` flag)
+
+When you push a version tag, GitHub Actions will automatically publish the extension to the VS Code Marketplace.
+
 ## Configuration
 
 ### Easy Configuration Panel
