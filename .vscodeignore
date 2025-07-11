@@ -1,0 +1,62 @@
+# Source files
+src/**
+tsconfig.json
+*.ts
+
+# Build and development files
+node_modules/**
+.vscode/**
+.vscode-test/**
+.gitignore
+.gitattributes
+
+# Documentation (keep README.md and images for marketplace)
+docs/**
+
+# Test files
+test/**
+**/*.test.ts
+**/*.test.js
+
+# Configuration files
+.eslintrc.json
+.eslintrc.js
+.prettierrc
+.editorconfig
+
+# Development scripts
+webpack.config.js
+rollup.config.js
+vite.config.js
+
+# CI/CD files
+.github/**
+.travis.yml
+.circleci/**
+azure-pipelines.yml
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Package files
+*.tgz
+*.tar.gz
+
+# Environment files
+.env
+.env.*
+
+# IDE files
+.idea/**
+*.swp
+*.swo
+*~
+
+# Misc
+coverage/**
+*.lcov
+.nyc_output/**
