@@ -1,8 +1,10 @@
 name: Publish Extension
 
 on:
-  push:
-    tags: [ 'v*' ]
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
   workflow_dispatch:
 
 permissions:
@@ -13,10 +15,17 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     environment: vs-code
+    # Only run if CI workflow succeeded and it was triggered by a tag push
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch != 'main' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
     
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.workflow_run.head_branch }}
       
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -49,15 +58,14 @@ jobs:
         VSCE_PAT: ${{ secrets.VSCE_PAT }}
         
     - name: Create GitHub Release
-      if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ github.ref_name }}
-        name: Release ${{ github.ref_name }}
+        tag_name: ${{ github.event.workflow_run.head_branch }}
+        name: Release ${{ github.event.workflow_run.head_branch }}
         body: |
           ## What's Changed
           
-          See the [commit history](https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}) for details.
+          See the [commit history](https://github.com/${{ github.repository }}/commits/${{ github.event.workflow_run.head_branch }}) for details.
           
           ## Installation
           
