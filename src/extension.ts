@@ -57,7 +57,7 @@ class NetlifyStatusProvider {
     }
 
     private async fetchSiteStatus(): Promise<void> {
-        if (this.isRefreshing) return;
+        if (this.isRefreshing) {return;}
         this.isRefreshing = true;
 
         try {

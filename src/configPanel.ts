@@ -78,7 +78,7 @@ export class ConfigurationPanel {
     }
 
     private setupWebviewMessageListener() {
-        if (!this.panel) return;
+        if (!this.panel) {return;}
         
         const messageListener = this.panel.webview.onDidReceiveMessage(
             async (message) => {
