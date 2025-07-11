@@ -1,6 +1,53 @@
 import * as vscode from 'vscode';
-import axios from 'axios';
+import * as https from 'https';
 import { ConfigurationPanel } from './configPanel';
+
+// Helper function to make HTTPS requests
+function makeHttpsRequest<T>(url: string, options: { headers?: Record<string, string>, timeout?: number } = {}): Promise<T> {
+    return new Promise((resolve, reject) => {
+        const parsedUrl = new URL(url);
+        const requestOptions = {
+            hostname: parsedUrl.hostname,
+            port: parsedUrl.port || 443,
+            path: parsedUrl.pathname + parsedUrl.search,
+            method: 'GET',
+            headers: options.headers || {},
+            timeout: options.timeout || 10000
+        };
+
+        const req = https.request(requestOptions, (res) => {
+            let data = '';
+            
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+            
+            res.on('end', () => {
+                try {
+                    if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                        const jsonData = JSON.parse(data);
+                        resolve(jsonData);
+                    } else {
+                        reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
+                    }
+                } catch (error) {
+                    reject(new Error(`JSON parse error: ${error}`));
+                }
+            });
+        });
+
+        req.on('error', (error) => {
+            reject(error);
+        });
+
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Request timeout'));
+        });
+
+        req.end();
+    });
+}
 
 interface NetlifyDeployment {
     id: string;
@@ -71,17 +118,12 @@ class NetlifyStatusProvider {
             console.log('Fetching site status for:', config.siteId);
 
             // Get the latest deployment (not just published_deploy)
-            const deploymentsResponse = await axios.get<NetlifyDeployment[]>(`https://api.netlify.com/api/v1/sites/${config.siteId}/deploys`, {
+            const deployments = await makeHttpsRequest<NetlifyDeployment[]>(`https://api.netlify.com/api/v1/sites/${config.siteId}/deploys?per_page=1`, {
                 headers: {
                     'Authorization': `Bearer ${config.apiToken}`
                 },
-                timeout: 10000,
-                params: {
-                    per_page: 1  // Just get the latest deployment
-                }
+                timeout: 10000
             });
-
-            const deployments = deploymentsResponse.data;
             if (!deployments || deployments.length === 0) {
                 this.updateStatusBar('⚪ Netlify: No deployments', 'No deployments found');
                 return;
@@ -91,14 +133,12 @@ class NetlifyStatusProvider {
             console.log('Latest deployment state:', deployment.state, 'ID:', deployment.id.substring(0, 8));
 
             // Also get site info for name/URL
-            const siteResponse = await axios.get<NetlifySite>(`https://api.netlify.com/api/v1/sites/${config.siteId}`, {
+            const site = await makeHttpsRequest<NetlifySite>(`https://api.netlify.com/api/v1/sites/${config.siteId}`, {
                 headers: {
                     'Authorization': `Bearer ${config.apiToken}`
                 },
                 timeout: 10000
             });
-
-            const site = siteResponse.data;
 
             // Track deployment state changes
             if (this.lastDeploymentState !== deployment.state) {
@@ -127,13 +167,15 @@ class NetlifyStatusProvider {
             console.error('Netlify API Error:', error);
             
             let errorMessage = 'Connection error';
-            if (axios.isAxiosError(error)) {
-                if (error.response?.status === 401) {
+            if (error instanceof Error) {
+                if (error.message.includes('HTTP 401')) {
                     errorMessage = 'Invalid token';
-                } else if (error.response?.status === 404) {
+                } else if (error.message.includes('HTTP 404')) {
                     errorMessage = 'Site not found';
-                } else if (error.code === 'ECONNABORTED') {
+                } else if (error.message.includes('timeout')) {
                     errorMessage = 'Timeout';
+                } else if (error.message.includes('ENOTFOUND')) {
+                    errorMessage = 'Network error';
                 }
             }
             
