@@ -1,5 +1,52 @@
 import * as vscode from 'vscode';
-import axios from 'axios';
+import * as https from 'https';
+
+// Helper function to make HTTPS requests
+function makeHttpsRequest<T>(url: string, options: { headers?: Record<string, string>, timeout?: number } = {}): Promise<T> {
+    return new Promise((resolve, reject) => {
+        const parsedUrl = new URL(url);
+        const requestOptions = {
+            hostname: parsedUrl.hostname,
+            port: parsedUrl.port || 443,
+            path: parsedUrl.pathname + parsedUrl.search,
+            method: 'GET',
+            headers: options.headers || {},
+            timeout: options.timeout || 10000
+        };
+
+        const req = https.request(requestOptions, (res) => {
+            let data = '';
+            
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+            
+            res.on('end', () => {
+                try {
+                    if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+                        const jsonData = JSON.parse(data);
+                        resolve(jsonData);
+                    } else {
+                        reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
+                    }
+                } catch (error) {
+                    reject(new Error(`JSON parse error: ${error}`));
+                }
+            });
+        });
+
+        req.on('error', (error) => {
+            reject(error);
+        });
+
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Request timeout'));
+        });
+
+        req.end();
+    });
+}
 
 interface NetlifySite {
     id: string;
@@ -107,7 +154,7 @@ export class ConfigurationPanel {
 
     private async testApiToken(token: string) {
         try {
-            const response = await axios.get('https://api.netlify.com/api/v1/user', {
+            const response = await makeHttpsRequest('https://api.netlify.com/api/v1/user', {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 },
@@ -117,20 +164,20 @@ export class ConfigurationPanel {
             this.panel?.webview.postMessage({
                 type: 'tokenTestResult',
                 success: true,
-                user: response.data
+                user: response
             });
         } catch (error) {
             this.panel?.webview.postMessage({
                 type: 'tokenTestResult',
                 success: false,
-                error: axios.isAxiosError(error) ? error.response?.data?.message || 'Invalid token' : 'Connection error'
+                error: error instanceof Error ? error.message : 'Connection error'
             });
         }
     }
 
     private async loadSites(token: string) {
         try {
-            const response = await axios.get<NetlifySite[]>('https://api.netlify.com/api/v1/sites', {
+            const response = await makeHttpsRequest<NetlifySite[]>('https://api.netlify.com/api/v1/sites', {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 },
@@ -138,7 +185,7 @@ export class ConfigurationPanel {
             });
 
             // Sort sites by most recently updated
-            const sites = response.data.sort((a, b) => 
+            const sites = response.sort((a, b) => 
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             );
 
@@ -149,7 +196,7 @@ export class ConfigurationPanel {
         } catch (error) {
             this.panel?.webview.postMessage({
                 type: 'sitesLoadError',
-                error: axios.isAxiosError(error) ? error.response?.data?.message || 'Failed to load sites' : 'Connection error'
+                error: error instanceof Error ? error.message : 'Connection error'
             });
         }
     }
@@ -197,14 +244,12 @@ export class ConfigurationPanel {
 
     private async loadCurrentSiteInfo(token: string, siteId: string) {
         try {
-            const response = await axios.get<NetlifySite>(`https://api.netlify.com/api/v1/sites/${siteId}`, {
+            const site = await makeHttpsRequest<NetlifySite>(`https://api.netlify.com/api/v1/sites/${siteId}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 },
                 timeout: 10000
             });
-
-            const site = response.data;
             
             this.panel?.webview.postMessage({
                 type: 'currentSiteLoaded',
