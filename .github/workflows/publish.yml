@@ -16,56 +16,75 @@ jobs:
     runs-on: ubuntu-latest
     environment: vs-code
     # Only run if CI workflow succeeded and it was triggered by a tag push
-    if: |
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch != 'main' &&
-      startsWith(github.event.workflow_run.head_branch, 'v')
+    if: github.event.workflow_run.conclusion == 'success'
     
     steps:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        ref: ${{ github.event.workflow_run.head_branch }}
+        ref: ${{ github.event.workflow_run.head_sha }}
+        fetch-depth: 0
+        
+    - name: Check if commit has version tag
+      id: check_tag
+      run: |
+        # Check if this commit has a version tag
+        TAG=$(git tag --points-at HEAD | grep '^v[0-9]' || echo "")
+        if [ -n "$TAG" ]; then
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "should_publish=true" >> $GITHUB_OUTPUT
+          echo "Found version tag: $TAG"
+        else
+          echo "should_publish=false" >> $GITHUB_OUTPUT
+          echo "No version tag found for this commit"
+        fi
       
     - name: Setup Node.js
+      if: steps.check_tag.outputs.should_publish == 'true'
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
         
     - name: Install dependencies
+      if: steps.check_tag.outputs.should_publish == 'true'
       run: npm ci
       
     - name: Run linter
+      if: steps.check_tag.outputs.should_publish == 'true'
       run: npm run lint
       
     - name: Compile TypeScript
+      if: steps.check_tag.outputs.should_publish == 'true'
       run: npm run compile
       
     - name: Package extension
+      if: steps.check_tag.outputs.should_publish == 'true'
       run: npx vsce package
       
     - name: Upload package as artifact
+      if: steps.check_tag.outputs.should_publish == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: extension-package
         path: '*.vsix'
         
     - name: Publish to VS Code Marketplace
-      if: startsWith(github.ref, 'refs/tags/v')
+      if: steps.check_tag.outputs.should_publish == 'true'
       run: npx vsce publish --no-dependencies
       env:
         VSCE_PAT: ${{ secrets.VSCE_PAT }}
         
     - name: Create GitHub Release
+      if: steps.check_tag.outputs.should_publish == 'true'
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ github.event.workflow_run.head_branch }}
-        name: Release ${{ github.event.workflow_run.head_branch }}
+        tag_name: ${{ steps.check_tag.outputs.tag }}
+        name: Release ${{ steps.check_tag.outputs.tag }}
         body: |
           ## What's Changed
           
-          See the [commit history](https://github.com/${{ github.repository }}/commits/${{ github.event.workflow_run.head_branch }}) for details.
+          See the [commit history](https://github.com/${{ github.repository }}/commits/${{ steps.check_tag.outputs.tag }}) for details.
           
           ## Installation
           
